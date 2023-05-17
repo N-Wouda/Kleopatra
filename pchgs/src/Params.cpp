@@ -99,7 +99,6 @@ void Params::_parse_vrplib(std::istream &inputFile) {
 
     // Read the next lines
     getline(inputFile, content);  // "Empty line" or "NAME : {instance_name}"
-    getline(inputFile, content);  // VEHICLE or "COMMENT: {}"
 
     // Check if the next line has "VEHICLE"
     // CVRP or VRPTW according to VRPLib format
@@ -110,18 +109,23 @@ void Params::_parse_vrplib(std::istream &inputFile) {
             inputFile >> content2 >> nbClients;
             nbClients--;
         }
+            // Read the data on the service time (used when the service time is constant for all
+            // clients)
+        else if (content == "SERVICE_TIME") {
+            inputFile >> content2 >> serviceTimeData;
+        }
             // Read the type of edge weights
         else if (content == "EDGE_WEIGHT_TYPE") {
             inputFile >> content2 >> content3;
-            if (content3 != "EXPLICIT") {
+            if (content3 != "EUC_2D") {
                 throw std::logic_error(
-                        "Implicit (computed) distance matrix is not implemented!");
+                        "Non-Euclidean distance matrix is not implemented!");
             }
         } else if (content == "EDGE_WEIGHT_FORMAT") {
-            inputFile >> content2 >> content3;
-            if (content3 != "FULL_MATRIX") {
-                throw std::string("EDGE_WEIGHT_FORMAT only supports FULL_MATRIX");
-            }
+            // inputFile >> content2 >> content3;
+            // if (content3 != "FULL_MATRIX") {
+            //     throw std::string("EDGE_WEIGHT_FORMAT only supports FULL_MATRIX");
+            // }
         } else if (content == "CAPACITY") {
             inputFile >> content2 >> vehicleCapacity;
         } else if (content == "VEHICLES" || content == "SALESMAN") {
@@ -129,37 +133,6 @@ void Params::_parse_vrplib(std::istream &inputFile) {
         } else if (content == "DISTANCE") {
             inputFile >> content2 >> durationLimit;
             isDurationConstraint = true;
-        }
-            // Read the data on the service time (used when the service time is constant for all
-            // clients)
-        else if (content == "SERVICE_TIME") {
-            inputFile >> content2 >> serviceTimeData;
-        }
-            // Read the edge weights of an explicit distance matrix
-        else if (content == "EDGE_WEIGHT_SECTION") {
-            _timeCost = Matrix(nbClients + 1);
-
-            for (int i = 0; i <= nbClients; i++) {
-                for (int j = 0; j <= nbClients; j++) {
-                    // Keep track of the largest distance between two clients (or the depot)
-                    int cost;
-                    inputFile >> cost;
-                    _timeCost.set(i, j, cost);
-                }
-            }
-        }
-            // Read the cost matrix
-        else if (content == "EDGE_COST_SECTION") {
-            hasDistCost = true;
-            _distCost = Matrix(nbClients + 1);
-            for (int i = 0; i <= nbClients; i++) {
-                for (int j = 0; j <= nbClients; j++) {
-                    // Keep track of the largest distance between two clients (or the depot)
-                    int cost;
-                    inputFile >> cost;
-                    _distCost.set(i, j, cost);
-                }
-            }
         } else if (content == "NODE_COORD_SECTION") {
             // Reading client coordinates
             cli = std::vector<Client>(nbClients + 1);
@@ -172,6 +145,19 @@ void Params::_parse_vrplib(std::istream &inputFile) {
                 }
 
                 cli[i].custNum--;
+            }
+
+            _timeCost = Matrix(nbClients + 1);
+
+            for (int i = 0; i <= nbClients; i++) {
+                for (int j = 0; j <= nbClients; j++) {
+                    int x_i = cli[i].coordX;
+                    int x_j = cli[j].coordX;
+                    int y_i = cli[i].coordY;
+                    int y_j = cli[j].coordY;
+                    int cost = 10 * std::hypot(x_i - x_j, y_i - y_j);
+                    _timeCost.set(i, j, cost);
+                }
             }
         }
             // Read the demand of each client (including the depot, which should have demand 0)
@@ -189,45 +175,27 @@ void Params::_parse_vrplib(std::istream &inputFile) {
             if (content2 != "1") {
                 throw std::string("Expected depot index 1 instead of " + content2);
             }
-        } else if (content == "SERVICE_TIME_SECTION") {
-            for (int i = 0; i <= nbClients; i++) {
-                int clientNr = 0;
-                inputFile >> clientNr >> cli[i].serviceDuration;
-
-                // Check if the clients are in order
-                if (clientNr != i + 1) {
-                    throw std::string("Clients are not in order in the list of service times");
-                }
-            }
-            hasServiceTimeSection = true;
-        } else if (content == "RELEASE_TIME_SECTION") {
-            for (int i = 0; i <= nbClients; i++) {
-                int clientNr = 0;
-                inputFile >> clientNr >> cli[i].releaseTime;
-
-                // Check if the clients are in order
-                if (clientNr != i + 1) {
-                    throw std::string("Clients are not in order in the list of release times");
-                }
-            }
-        }
             // Read the time windows of all the clients (the depot should have a time window
             // from 0 to max)
-        else if (content == "TIME_WINDOW_SECTION") {
+        } else if (content == "TIME_WINDOW_SECTION") {
             isTimeWindowConstraint = true;
             for (int i = 0; i <= nbClients; i++) {
                 int clientNr = 0;
                 inputFile >> clientNr >> cli[i].earliestArrival >> cli[i].latestArrival;
+
+                cli[i].earliestArrival *= 10;
+                cli[i].latestArrival *= 10;
 
                 // Check if the clients are in order
                 if (clientNr != i + 1) {
                     throw std::string("Clients are not in order in the list of time windows");
                 }
             }
-        } else if (content == "PROFIT_SECTION") {
+        } else if (content == "PRIZE_SECTION") {
             for (int i = 0; i <= nbClients; i++) {
                 int clientNr = 0;
                 inputFile >> clientNr >> cli[i].profit;
+                cli[i].profit *= 10;
 
                 // Check if the clients are in order
                 if (clientNr != i + 1) {
@@ -235,13 +203,13 @@ void Params::_parse_vrplib(std::istream &inputFile) {
                 }
             }
         } else {
-            throw std::string("Unexpected data in input file: " + content);
+            std::cout << "Unknown section " << content << std::endl;
         }
     }
 
     if (!hasServiceTimeSection) {
         for (int i = 0; i <= nbClients; i++) {
-            cli[i].serviceDuration = (i == 0) ? 0 : serviceTimeData;
+            cli[i].serviceDuration = (i == 0) ? 0 : 10 * serviceTimeData;
         }
     }
 

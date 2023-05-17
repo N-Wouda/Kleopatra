@@ -369,7 +369,6 @@ Individual *Genetic::crossoverSREX(std::pair<const Individual *, const Individua
 
     bool improved = true;
     while (improved) {
-        assert(startA + nOfMovedRoutes - 1 < parents.first->chromR.size());
         // Difference for moving 'left' in parent A
         const int differenceALeft
                 = static_cast<int>(std::count_if(

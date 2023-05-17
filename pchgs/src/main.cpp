@@ -200,12 +200,15 @@ int main(int argc, char *argv[]) {
 
         // Export the best solution, if it exist
         if (population.getBestFound() != nullptr) {
-            if (!commandline.config.outputJSONPath.empty()) {
-                std::ofstream outputStream(commandline.config.outputJSONPath);
-                writeBKSAsJSON(*population.getBestFound(), params, outputStream);
-            } else {
-                writeBKSAsJSON(*population.getBestFound(), params, std::cout);
-            }
+            // if (!commandline.config.outputJSONPath.empty()) {
+            //     std::ofstream outputStream(commandline.config.outputJSONPath);
+            //     writeBKSAsJSON(*population.getBestFound(), params, outputStream);
+            // } else {
+            //     writeBKSAsJSON(*population.getBestFound(), params, std::cout);
+            // }
+
+            auto *best = population.getBestFound();
+            best->exportCVRPLibFormat(commandline.config.outputJSONPath);
         }
     }
 
